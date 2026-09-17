@@ -1,0 +1,178 @@
+================================================================
+沙盒内 APK 打包工具链 —— 安装与实战记录
+整理日期：2026-09-08   环境：Ubuntu 22.04 (x86_64) / 1GB 磁盘
+================================================================
+
+【结论先行】
+不需要 Android Studio，不需要 Gradle，不需要访问 dl.google.com。
+Ubuntu 官方仓库里就躺着一套完整的 Android 构建链，apt 一路装上即可。
+已实测跑通：Java 源码 → class → dex → APK → 对齐 → 签名 → 验签通过。
+
+================================================================
+1. 为什么"绕路"能成
+================================================================
+直接路线全部堵死：
+  dl.google.com（Android SDK 官方源）        →  403
+  Android Studio / Gradle 完整 SDK           →  需要上述源，装不了
+  apt 里的 android-sdk-build-tools 包        →  只有 3.6KB，是个联网下载器，
+                                               本身不含任何工具，装了也没用
+
+真正的突破口在 apt 仓库里：
+  · android.jar 由 libandroid-23-java 包提供（完整 Android 6.0 / API 23）
+  · dx.jar 由 dalvik-exchange 包提供（class → dex）
+  · aapt / zipalign / apksigner / apktool 均有 Debian 原生打包版
+这些都是真实可执行文件，不是下载器，不依赖任何外网。
+
+================================================================
+2. 安装步骤（照抄即可）
+================================================================
+第 0 步：修 apt 源（官方源 403，必须换国内镜像）
+  cat > /etc/apt/sources.list <<'EOF'
+  deb http://mirrors.cloud.tencent.com/ubuntu/ jammy main restricted universe multiverse
+  deb http://mirrors.cloud.tencent.com/ubuntu/ jammy-updates main restricted universe multiverse
+  deb http://mirrors.cloud.tencent.com/ubuntu/ jammy-security main restricted universe multiverse
+  deb http://mirrors.cloud.tencent.com/ubuntu/ jammy-backports main restricted universe multiverse
+  EOF
+  apt-get update
+
+第 1 步：装工具链（合计约 90MB）
+  apt-get install -y --no-install-recommends \
+      apktool aapt zipalign apksigner dalvik-exchange
+
+第 2 步：装 JDK（编译 Java 源码，约 246MB）
+  apt-get install -y --no-install-recommends default-jdk-headless
+
+第 3 步：装 Android SDK 类库（会顺带装上 android.jar）
+  apt-get install -y --no-install-recommends libandroid-23-java
+
+  装完确认：
+    ls -la /usr/lib/android-sdk/platforms/android-23/android.jar
+    → 这是个符号链接，指向 /usr/share/java/com.android.android-23.jar（15.6MB 真身）
+
+第 4 步：准备临时目录（重要，见坑位 1）
+  mkdir -p /data/workspace/apkbuild/tmpdir
+  export TMPDIR=/data/workspace/apkbuild/tmpdir
+
+================================================================
+3. 从零打一个 APK（已验证的完整命令）
+================================================================
+关键路径：
+  AJ=/usr/lib/android-sdk/platforms/android-23/android.jar
+  DX=/usr/lib/android-sdk/build-tools/debian/lib/dx.jar
+
+① 写 Java 源码（标准 Android 语法，不需要手写 smali）
+   src/com/example/hello/HelloWorld.java
+     package com.example.hello;
+     import android.app.Activity; import android.os.Bundle; import android.widget.Toast;
+     public class HelloWorld extends Activity {
+         protected void onCreate(Bundle b) {
+             super.onCreate(b);
+             Toast.makeText(this, "Hello from Java!", Toast.LENGTH_LONG).show();
+         }
+     }
+
+② 生成签名密钥
+   keytool -genkeypair -v -keystore mykey.jks -alias mykey \
+     -keyalg RSA -keysize 2048 -validity 10950 \
+     -storepass 123456 -keypass 123456 \
+     -dname "CN=Test, OU=Dev, O=Lab, L=SZ, ST=GD, C=CN"
+
+③ 编译（--release 8 是关键，见坑位 2）
+   javac -nowarn --release 8 -cp "$AJ" -d classes src/com/example/hello/HelloWorld.java
+
+④ class → dex
+   java -jar $DX --dex --output=classes.dex classes
+
+⑤ 打包资源与 Manifest
+   mkdir -p gen res
+   aapt package -f -m -J gen -S res -M AndroidManifest.xml -I "$AJ" -F app_unsigned.apk
+   aapt add app_unsigned.apk classes.dex
+
+⑥ 对齐
+   zipalign -f -p 4 app_unsigned.apk app_aligned.apk
+
+⑦ 签名
+   apksigner sign --ks mykey.jks --ks-key-alias mykey \
+     --ks-pass pass:123456 --key-pass pass:123456 \
+     --out app_signed.apk app_aligned.apk
+
+⑧ 验证
+   apksigner verify app_signed.apk              # 验签
+   aapt dump badging app_signed.apk             # 看包名/版本/入口 Activity
+   unzip -l app_signed.apk                      # 看内部结构
+
+预期结构（实测）：
+   AndroidManifest.xml   1756  二进制 AXML
+   classes.dex            852
+   META-INF/MYKEY.SF      326
+   META-INF/MYKEY.RSA    1294
+   META-INF/MANIFEST.MF   199
+
+================================================================
+4. 改现有 APK（二次开发路线）
+================================================================
+   apktool d target.apk -o decoded        # 解包 → 明文 Manifest + smali 源码
+   # 改 decoded/smali/... 或 decoded/AndroidManifest.xml
+   apktool b decoded -o modded.apk        # 重打包
+   zipalign -f -p 4 modded.apk mod_aligned.apk
+   apksigner sign --ks mykey.jks ... --out mod_signed.apk mod_aligned.apk
+
+实测：解包能还原出可读的 AndroidManifest.xml 和反编译的 smali，闭环成立。
+
+================================================================
+5. 踩坑清单
+================================================================
+[坑 1] apktool 报 "java.io.IOException: Input/output error"
+  → java 默认临时目录 /tmp 写入异常。
+  → 解法：export TMPDIR=<workspace 下的目录>，再跑 apktool。
+
+[坑 2] dx 报 "unrecognized parameter"
+  → 装错包了。Ubuntu 里名为 dx 的包是 OpenDX（数据可视化软件），
+    跟 Android 毫无关系。
+  → 正确包名是 dalvik-exchange。若已装错：
+      apt-get remove -y dx && apt-get autoremove -y
+
+[坑 3] javac 编译出的 class 太新，dx 不认
+  → 新版 javac 默认产出高版本 class 文件，老版 dx 解析失败。
+  → 解法：javac 加 --release 8，产出 major version 52（Java 8），dx 完全兼容。
+
+[坑 4] android.jar 看起来只有 49 字节
+  → 它是符号链接，不是坏文件。readlink -f 追下去能看到 15.6MB 的真实 jar。
+  → 别误判为"装残了"而重装。
+
+[坑 5] android-sdk-build-tools 装完什么都没有
+  → 这个包只是个联网下载器（3.6KB），本体要从 dl.google.com 拉，而该地址 403。
+  → 别在它身上浪费时间，用原生打包版工具。
+
+[坑 6] apktool 警告 "Could not extract resource: /prebuilt/linux/aapt_64"
+  → 只是警告，不是错误。apktool 会 fallback 到 PATH 里的 aapt，打包照常成功。
+
+[坑 7] 磁盘空间
+  → 全套（工具链 90MB + JDK 246MB + SDK 类库）约 420MB。
+  → 环境只有 1GB 时，务必先 apt-get clean 并把 TMPDIR 指到大分区。
+
+================================================================
+6. 能力边界
+================================================================
+能做：
+  ✓ 从 Java 源码构建可安装 APK（API 23 及以下支持的写法）
+  ✓ 解包 / 修改 / 重打包 / 签名任意 APK
+  ✓ 命令行批量构建，适合自动化
+
+不能做：
+  ✗ 用 Gradle + 新版 Android Gradle Plugin 构建（需要 Google 源）
+  ✗ 使用 API 24+ 的新特性（手上只有 API 23 类库，更高版本需另找 platform）
+  ✗ 编译含 resources.arsc / 复杂 res 的项目时，aapt 版本较老（v0.2-debian），
+    可能遇到兼容性问题；资源简单的项目没问题
+  ✗ 编译 native（NDK / JNI）代码 —— 未装 NDK
+
+================================================================
+7. 产物清单
+================================================================
+  app_signed.apk             Java 源码构建 + 签名完成，可安装
+  hello_signed.apk           smali 路线构建的验证产物
+  mykey.jks                  测试用签名密钥（口令 123456）
+  src/                       Java 源码
+  stub/                      自造的 Android 桩类（真 android.jar 到位后已不需要，
+                             但网络受限时可作为应急方案保留）
+================================================================
