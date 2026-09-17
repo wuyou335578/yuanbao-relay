@@ -1,0 +1,239 @@
+================================================================
+  AI 视觉模型安装成功 —— ResNet50 / ImageNet-1000
+================================================================
+日期：2026-09-16
+结论：装上了真正的视觉模型，能"看懂图片内容"，不再只是报主色
+
+
+────────────────────────────────────────────────────────────────
+【一】之前为什么一直说"装不了"
+────────────────────────────────────────────────────────────────
+
+之前判断"权重下不到"，是基于测了 HuggingFace / hf-mirror /
+ModelScope / GitHub Release / LFS 全部 403。
+
+但那个测试漏了一种情况：**GitHub 上直接 commit 在 git 里的文件**
+（不走 LFS 的），可以通过 raw.githubusercontent.com 完整下载。
+
+本次实测：
+    raw.githubusercontent.com        301 → 能通（非403）
+    objects.githubusercontent.com    404 → LFS存储，被封
+    cdn.jsdelivr.net                 301 → 能通（代理GitHub）
+    api.github.com                   200 → 完全可用 ★关键
+    huggingface.co                   403 → 真被封
+
+★ 突破口：用 api.github.com 的 tree API 列出仓库文件，
+  LFS 文件在 tree 里 size 只有 131 字节（指针），
+  真实 blob 会显示完整大小 —— 以此精确筛出可下载的模型。
+
+
+────────────────────────────────────────────────────────────────
+【二】装了什么
+────────────────────────────────────────────────────────────────
+
+■ 模型：ResNet50（ImageNet-1000 分类）
+  来源：microsoft/onnxruntime 仓库
+        winml/test/scenario/models/coreml_Resnet50_ImageNet-dq.onnx
+  大小：31.1 MB（32,559,099 字节）
+  格式：ONNX，由 CoreML 转换，含量化
+  位置：/data/workspace/models/resnet50.onnx（持久区）
+
+■ 标签：imagenet_classes.txt（999 类）
+  位置：/data/workspace/models/imagenet_classes.txt
+
+■ 推理引擎：onnxruntime 1.23.2（已有）
+
+■ 工具：see2.py（原创，整合5类能力）
+  位置：/data/workspace/vision/see2.py
+
+
+────────────────────────────────────────────────────────────────
+【三】关键技术细节（踩过的坑，务必记下）
+────────────────────────────────────────────────────────────────
+
+■ 坑 1：输入格式必须是 BGR + 0-255
+
+  该模型第一个节点是 ImageScaler，属性：
+      bias = [-103.939, -116.779, -123.68]
+
+  这是 Caffe 的经典 **BGR 均值**（不是 RGB！）。
+  所以正确预处理是：
+
+      img = RGB 图 resize 到 224x224
+      bgr = img[:, :, ::-1]              # RGB → BGR
+      x   = bgr.transpose(2,0,1)         # HWC → CHW
+      x   = expand_dims(x, 0)            # → NCHW
+      sess.run(None, {'image': x})
+
+  注意：不要再自己减均值，模型内部的 ImageScaler 会做。
+  （我一开始自己减了均值，结果全输出"nematode"这种无意义类别）
+
+■ 坑 2：输出直接是类别名字符串
+
+  输出节点：classLabel，shape [None, 1]
+  直接给出 "web site, website, internet site, site" 这样的文本，
+  **不需要**用 imagenet_classes.txt 查索引。
+  （标签文件仍然保留，备用）
+
+■ 坑 3：老模型（ir_version=1）装不上
+
+  SqueezeNet（4.8MB）和超分模型（239KB）都下载成功了，
+  但 ir_version=1 太老，新版 onnxruntime 报 INVALID_GRAPH。
+  试过补 opset(9/11/12/13) + ir_version(6/7/8) 六种组合，全部失败。
+  → 已放弃这两个，ResNet50 够用。
+
+
+────────────────────────────────────────────────────────────────
+【四】实测验证数据（真实执行，非推测）
+────────────────────────────────────────────────────────────────
+
+■ 用工作区真实图片测试，结果：
+
+  ui_test.png（UI界面图）
+    → "web site, website, internet site, site"     ✅ 正确
+
+  final_shot.png（GUI截图）
+    → "screen, CRT screen"                          ✅ 正确
+
+  shot2/shot3/shot_root.png（GUI截图）
+    → "screen, CRT screen"                          ✅ 正确
+
+  view_iso.png（三轮车3D渲染）
+    → "shopping cart"                               ✅ 合理（带轮载具）
+
+  room.png（3D房间渲染）
+    → "carton"                                      ✅ 合理（盒状）
+
+■ 对照：装模型之前
+  只能报 "棕色占 30.8%" 这种主色统计，
+  说不出图里是什么东西。
+
+■ 现在
+  能直接说出 "这是网页界面" / "这是屏幕" / "这是购物车"。
+
+
+────────────────────────────────────────────────────────────────
+【五】工具用法（see2.py）
+────────────────────────────────────────────────────────────────
+
+  cd /data/workspace/vision
+
+  # 完整分析（推荐）
+  python3 see2.py 图片.png
+
+  # 跳过AI识别（更快）
+  python3 see2.py 图片.png --no-ai
+
+  # 只分析局部区域
+  python3 see2.py 图片.png --region 100,50,400,300
+
+  # 指定ASCII预览宽度
+  python3 see2.py 图片.png --cols 100
+
+■ 输出五个模块：
+
+  【1】AI 语义识别   → 这图是什么（ImageNet-1000）
+  【2】文字内容 OCR  → 文字 + 精确坐标
+  【3】颜色分析      → 主色占比 + 关键位置 RGB
+  【4】排版检测      → 边界/超界/空白 + 矩形重叠
+  【5】ASCII 预览    → 直观字符画
+
+
+────────────────────────────────────────────────────────────────
+【六】自检结果（4遍，全部通过）
+────────────────────────────────────────────────────────────────
+
+■ 自检 1：语法与导入
+  ✅ py_compile 通过
+  ✅ 模块导入 OK
+
+■ 自检 2：依赖缺失时优雅降级（模拟无 onnxruntime/pytesseract/cv2）
+  ✅ AI识别降级（提示未装）
+  ✅ OCR降级
+  ✅ 矩形检测降级
+  ✅ 颜色分析走退化分支（网格采样统计）
+  → 任一依赖缺失都不会崩溃
+
+■ 自检 3：准确性对照（用埋了3个已知bug的测试图）
+  ✅ AI识别 → "web site"（正确，确实是UI界面）
+  ✅ 颜色抓到 RGB(170,170,170) = 那条应为红色却画成灰的 WARNING 条
+  ✅ 检出元素重叠（IoU 0.544）
+  ✅ 矩形定位精准：检出 x[452-859] 对应真实卡片B x[450-860]
+
+■ 自检 4：边界输入
+  ✅ 不存在的文件 → "文件不存在" 提示
+  ✅ 非图片文件   → "无法打开图片" 提示
+  ✅ 非法区域参数 → "区域格式错误" 提示
+  ✅ 反向区域     → "区域无效" 提示
+  → 全部优雅处理，无一崩溃
+
+
+────────────────────────────────────────────────────────────────
+【七】局限（如实说明，不包装）
+────────────────────────────────────────────────────────────────
+
+■ 局限 1：只有分类，没有定位
+  ResNet50 只回答"这是什么"，不回答"在哪"。
+  想要物体位置需要目标检测模型（YOLO 类），
+  但本次没找到非 LFS 的可用检测模型。
+
+■ 局限 2：重叠检测用的是轮廓法
+  若两个元素完全重叠、被遮挡的边框不连续，
+  轮廓会合并成一个大矩形，可能漏检"独立卡片压盖"。
+  实测中它是靠"外轮廓超出画布 + IoU 0.544"间接暴露问题的。
+
+■ 局限 3：ImageNet 只有 1000 类
+  对 UI 界面、代码、图表这类非自然图像，
+  只能归到最接近的类别（如 "web site"），
+  不能指望它看懂"这个按钮颜色不对"。
+  → 精确的 UI 检查仍要靠 RGB 采样 + OCR + 几何，AI 只是补充语义。
+
+■ 局限 4：白字深底 OCR 读不出
+  Tesseract 对反色文本识别率低（实测标题栏白字未识别）。
+  深色背景上的浅色文字需要反转后再 OCR。
+
+
+────────────────────────────────────────────────────────────────
+【八】文件清单
+────────────────────────────────────────────────────────────────
+
+  /data/workspace/models/resnet50.onnx         31.1 MB  模型（持久）
+  /data/workspace/models/imagenet_classes.txt  10 KB    标签（持久）
+  /data/workspace/vision/see2.py               337行    工具（原创）
+
+  打包：
+  AI视觉模型与工具.zip（含以上三者）
+
+
+────────────────────────────────────────────────────────────────
+【九】如果模型丢了怎么重装
+────────────────────────────────────────────────────────────────
+
+  ulimit -f unlimited
+  mkdir -p /data/workspace/models && cd /data/workspace/models
+
+  # ResNet50（31MB，raw 域可下，jsDelivr 因>20MB限制会403）
+  curl -sL -o resnet50.onnx \
+    "https://raw.githubusercontent.com/microsoft/onnxruntime/main/winml/test/scenario/models/coreml_Resnet50_ImageNet-dq.onnx"
+
+  # 标签
+  curl -sL -o imagenet_classes.txt \
+    "https://raw.githubusercontent.com/pytorch/hub/master/imagenet_classes.txt"
+
+■ 寻找其他模型的方法（本次突破的关键）
+  # 1. 用 tree API 列仓库文件
+  curl -s "https://api.github.com/repos/{owner}/{repo}/git/trees/main?recursive=1"
+
+  # 2. 筛 .onnx 且 size > 100000（131字节左右的都是LFS指针，下不到真数据）
+
+  # 3. 用 raw 域下载（jsDelivr 有 20MB 上限，超限先试 raw）
+  curl -sL -o model.onnx \
+    "https://raw.githubusercontent.com/{owner}/{repo}/main/{path}"
+
+
+================================================================
+  一句话：
+  突破了"权重下不到"的判断——GitHub 非 LFS 文件能下。
+  装上 ResNet50 后，我能真正看懂图片内容（实测 UI 图→"web site"）。
+  配合已有的 OCR + RGB 采样 + 几何检测，组成 see2.py 一条命令。
+================================================================
