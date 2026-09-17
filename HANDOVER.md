@@ -82,6 +82,28 @@ zig build --cache-dir /bigworkspace/cache --global-cache-dir /bigworkspace/gcach
 **zig c++ 必带参数**：`-Wno-nullability-completeness`
 （否则 119 条 libcxx 警告会盖住真实错误）
 
+## 视觉 AI 现状（2026-09-17 升级）
+
+仓库里现在有 **YOLOv8-nano**（`models/yolov8n.onnx`，12.2 MB）：
+
+- 目标检测，80 个 COCO 类别，**带坐标框**
+- 比原来那个 ResNet50 强得多：ResNet 只说"整张图像什么"，
+  YOLO 说"图里有什么、分别在哪个位置"
+- CPU 实测单张 74ms，可实时
+- 用法：`python3 tools/detect.py 图片.jpg --model models/yolov8n.onnx`
+
+配套 OCR：**tesseract 4.1.1**（apt 装，`tesseract-ocr-chi-sim` 含中文）
+实测能从图里读出 "card"、"status OK"。
+
+**为什么不是 CLIP**：CLIP 才是最好的通用视觉模型（图文对齐、零样本），
+但权重全拿不到——HuggingFace 403、OpenAI blob 403、modelscope 403、
+PyTorch 官方 403、Google/Facebook CDN 全部被封。
+GitHub 代码搜索也搜不到可用的 CLIP onnx。**别再浪费时间试了。**
+
+**能拿到模型文件的唯一通道**：用 token 走 `git/blobs` API 从任意公开
+GitHub 仓库下载（最大 100MB）。`ghfetch.py` 就是干这个的。
+注意：Python urllib 在本环境 DNS 不稳，上传脚本要用 curl（见 `upload_curl.sh`）。
+
 ## 之前做过的事（避免重复劳动）
 
 - **Zig 环境**：0.16.0 + zls 0.16.0（版本必须对齐）。zls 编译需把
