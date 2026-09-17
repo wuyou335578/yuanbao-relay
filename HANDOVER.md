@@ -1,125 +1,268 @@
-# 给下一个元宝看的接手文档
+# HANDOVER —— 接手文档
 
-> 这个仓库是**跨会话的持久记忆**。沙盒不保证永久存活，
-> 但这里的内容会一直在。拿到本文件的 AI 请先读完再动手。
+> 你是新接手的 AI？**先读完这份文件再动手。**
+> 这是跨会话的持久记忆库。沙盒会重置，但这里的内容一直在。
+>
+> 最后更新：2026-09-17
 
-## 这是什么
+---
 
-一个"AI 工作环境备份仓库"。目的是解决沙盒文件不持久的问题——
-把**不可再生的原创资产**存进来，需要时用 `bootstrap.sh` 恢复。
+## 一、这是什么
 
-刻意**不存**可再生的东西（zig 编译器、capstone 库等），
-它们用 `pip install` / `apt install` 几分钟就能回来，占仓库体积反而拖慢恢复。
+**一个 AI 工作环境的备份仓库**，用来解决"沙盒文件不持久"的问题。
 
-## 目录
+核心设计原则：
+
+- ✅ **存**不可再生的原创资产（脚本、文档、踩坑记录）
+- ✅ **存**本机下不到、但能从 GitHub 拿到的软件（模型、工具）
+- ❌ **不存**能用 `apt` / `pip` 几分钟重装的东西（zig、capstone、tesseract）
+
+这样恢复时又快又小。
+
+| 仓库 | 地址 | 用途 |
+|---|---|---|
+| **主仓库** | `github.com/wuyou335578/yuanbao-relay` | 脚本 + 文档 + 小模型 |
+| 计划中 | `yuanbao-jdk` | JDK 17 分卷（133 MB，太大不混进来） |
+| 计划中 | `yuanbao-tools` | apktool / jadx / NDK 等大件 |
+
+**拆分理由**：恢复用 codeload 下载整个仓库。主仓库保持轻量，
+每次恢复只需要几秒；大件按需单独拉取。
+
+---
+
+## 二、目录结构
 
 ```
-bootstrap.sh                 一键恢复脚本（先跑这个）
-tools/                       原创脚本
-  lsp_query.py               让 AI 查 Zig 代码真相（LSP 补全/悬停/诊断）
-  see2.py                    AI 视觉分析主力（语义+OCR+配色+排版+可编辑性）
-  see.py                     视觉分析简版
-  img2ascii.py               图片转字符画（纯 Python，无依赖）
-  render_and_see.py          HTML 渲染 + 截图 + 分析
-  一键安装.sh                 环境自检脚本
-docs/                        踩坑文档（最有价值的部分）
-  00_先读我.md                总入口
-  Zig开发环境绕路安装说明.txt    ★ codeload 绕路法、Zig 0.16 API 全部变动
-  说明文档.txt                 ★ 热重载实现 + 6 条踩坑（含持久区 IO 问题）
-  AI视觉模型说明.txt
-  APK打包工具链安装与实战记录.txt
-  GTA5修改器架构逆向分析.md
-  GTA5模组制作参考资料与关键知识点.md
+yuanbao-relay/
+├── HANDOVER.md              ← 你正在读的这份（最重要）
+├── bootstrap.sh             ← 一键恢复脚本
+│
+├── tools/                   ← 原创脚本，每个都有实际用途
+│   ├── detect.py            YOLOv8 目标检测（80类+坐标框，58ms/张）
+│   ├── see2.py              AI 视觉分析主力（语义+OCR+配色+排版）
+│   ├── see.py               视觉分析简版
+│   ├── img2ascii.py         图片转字符画（纯 Python，零依赖）
+│   ├── render_and_see.py    HTML 渲染 → 截图 → 分析
+│   ├── lsp_query.py         让 AI 查 Zig 代码真相（补全/悬停/诊断）
+│   └── 一键安装.sh           环境自检
+│
+├── models/
+│   └── yolov8n.onnx         YOLOv8-nano 检测模型（12.2 MB）
+│
+└── docs/                    ← 踩坑文档（最有价值的部分）
+    ├── 00_先读我.md              总入口
+    ├── Zig开发环境绕路安装说明.txt   ★ codeload 绕路法 + Zig 0.16 API 全部变动
+    ├── 说明文档.txt               ★ 热重载实现 + 6 条踩坑
+    ├── AI视觉模型说明.txt
+    ├── APK打包工具链安装与实战记录.txt
+    ├── GTA5修改器架构逆向分析.md
+    └── GTA5模组制作参考资料与关键知识点.md
 ```
 
-## 怎么恢复
+---
+
+## 三、怎么恢复
 
 ```bash
 bash bootstrap.sh wuyou335578/yuanbao-relay
 ```
 
-会自动：拉回脚本 → `pip install ziglang` → apt 装 capstone → 自检。
+自动完成：
+1. codeload 拉回所有脚本和文档（**不需要 token**）
+2. `pip install ziglang`（zig 编译器）
+3. apt 装 capstone（反汇编）+ tesseract（OCR）
+4. pip 装 onnxruntime / opencv（跑 YOLOv8）
+5. 自检
 
-**读取不需要 token**（仓库是 Public，走 `codeload.github.com`，实测 200）。
-**写入需要 token**（GitHub fine-grained PAT，Contents: Read and write）。
+**读取不需要 token**（仓库 Public，走 `codeload.github.com`，实测 200）
+**写入需要 token**（GitHub fine-grained PAT，Contents: Read and write）
 
-## 本机环境已知限制（重要，别重复踩）
+---
 
-**网络**——这些实测过，别浪费时间重试：
+## 四、环境能力清单（本机实测，别重复验证）
 
-| 目标 | 结果 |
-|---|---|
-| `github.com` 网页 / GitHub release（走 objects） | ❌ 403 |
-| `codeload.github.com`（**源码**） | ✅ 200 |
-| `api.github.com`（带 token 读写） | ✅ 200 |
-| `raw.githubusercontent.com` | ⚠️ 时通时断 |
-| `mirrors.cloud.tencent.com`（apt + pip + Maven） | ✅ 200 |
-| 阿里云 / 华为云 Maven 镜像 | ❌ 403 |
-| SSH 任意公网地址 | ❌ 报文不出沙盒，连不存在的 IP 报同样的错 |
+### 编译器 / 运行时
 
-**apt**：官方源是 403，必须先换成腾讯镜像：
+| 工具 | 版本 | 状态 |
+|---|---|---|
+| zig | 0.16.0 | ✅ 完整版（含 libc/libcxx/libcxxabi/libunwind） |
+| g++ / gcc | 11.4.0 | ✅ |
+| python3 | 3.10.12 | ✅ |
+| java (JRE) | 17.0.20 | ✅ |
+| **javac (JDK)** | **17.0.20** | ✅ **2026-09-17 新装好** |
+| dotnet-sdk | 6.0 | apt 源里有，需要时装 |
+| go / rust | — | 未装 |
+
+👉 有了 javac 意味着：**能编译 Java 代码**，能跑 apktool/jadx 这类 jar。
+
+### 视觉 / AI
+
+| 能力 | 实现 | 状态 |
+|---|---|---|
+| 目标检测 | YOLOv8n onnx | ✅ 80 类 + 坐标框，58ms/张 |
+| OCR | tesseract 4.1.1 | ✅ 含中文包 |
+| 整图分类 | ResNet50 | ✅ |
+| 推理引擎 | onnxruntime 1.23.2 | ✅ |
+| 图像处理 | opencv 5.0.0 | ✅ |
+
+### 明确做不到的（别浪费时间）
+
+- ❌ **Visual Studio / VS Code** —— 沙盒是 Ubuntu Linux，无桌面环境
+- ❌ **SSH 连任意公网服务器** —— 报文不出沙盒，有私钥也没用
+- ❌ **Ghidra / CLIP 模型** —— 所有下载源被封（详见下节）
+- ❌ **Git LFS** —— 下载走 `media.githubusercontent.com`，实测 **403**
+
+---
+
+## 五、网络限制对照表（实测，别重复试）
+
+| 目标 | 结果 | 备注 |
+|---|---|---|
+| **`codeload.github.com`** | ✅ **200** | **下载源码/整个仓库的唯一可靠通道** |
+| **`api.github.com`（带 token）** | ✅ **200** | 读写、搜索、blobs 下载 |
+| `github.com` 网页 | ❌ 403 | |
+| GitHub release（走 objects） | ❌ 403 | 所以 jar/zip 下不了 |
+| `raw.githubusercontent.com` | ❌ 403 | |
+| `media.githubusercontent.com` | ❌ 403 | LFS 走这个，所以 LFS 不可用 |
+| `mirrors.cloud.tencent.com` | ✅ 200 | apt + pip + Maven 全能 |
+| 阿里云 / 华为云 Maven | ❌ 403 | |
+| huggingface.co | ❌ 403 | |
+| modelscope.cn | ❌ 403 | |
+| download.pytorch.org | ❌ 403 | |
+| openaipublic (OpenAI blob) | ❌ 403 | |
+| SSH 任意公网 IP:端口 | ❌ 完全不通 | 连不存在的 IP 报同样的错 |
+
+**结论**：能下源码，下不了 release 制品。
+**绕过办法**：用户在本地下载好 → 传进这个仓库 → 我用 codeload 拿。
+
+---
+
+## 六、GitHub 传输技术细节（重要，容易踩坑）
+
+### 单文件 ≤ 100 MB
+
+- 用户用 git 命令行推：上限 100 MB
+- 我用 API 上传：实测 **30 MB 可以，45 MB 被拒**（`input was too large`）
+
+### 大文件必须分卷
+
 ```bash
-sed -i 's|archive.ubuntu.com/ubuntu|mirrors.cloud.tencent.com/ubuntu|g; \
-        s|security.ubuntu.com/ubuntu|mirrors.cloud.tencent.com/ubuntu|g' \
-    /etc/apt/sources.list
+split -b 90m 大文件.zip part_
+# 上传 part_aa / part_ab / ...
+# 我下载后 cat part_* > 原文件 合并
 ```
 
-**持久区 IO**：`/data/workspace` 是 virtio_rw，跟 zig 的 IO 路径有兼容问题。
-编译 Zig 项目会报 `error: unable to load 'build.zig': InputOutput`——
-文件明明可读、空间也够。**解法**：复制到根分区（`/bigworkspace` 或 `/tmp`）再编译：
+### 上传脚本必须用 curl，不能用 Python urllib
+
+**本环境 Python 的 `urlopen` 有 DNS 问题**：
+`socket.gethostbyname()` 能解析，但 `urllib` 一直报
+`Temporary failure in name resolution` / `Name or service not known`。
+**curl 却是正常的**。所有上传脚本改用 curl。
+
+### 上传大文件要走 git 低层 API
+
+`contents` API 上限只有 1 MB（base64 塞 JSON）。大文件必须：
+
+1. `POST /git/blobs` 建 blob
+2. `GET /git/ref/heads/main` 拿当前 tree
+3. `POST /git/trees` 建新 tree（带 `base_tree`）
+4. `POST /git/commits` 建 commit
+5. `PATCH /git/refs/heads/main` 移动分支
+
+### 认证必须用 Bearer
+
+`Authorization: Bearer <token>` —— 旧写法 `token xxx` 会报
+`Request denied / No policy rule matched`。
+
+### 更新/删除文件必须带 sha
+
+否则报 `"sha" wasn't supplied`。先 GET 拿 sha，再 PUT/DELETE。
+
+### ⚠️ 并发陷阱：base_tree 会过期
+
+连续上传多个文件时，如果第二个用了**过期的 base_tree**，
+会把第一个的提交覆盖掉。**每次上传前重新取 base_tree**。
+（2026-09-17 踩过：模型先传成功，随后传 detect.py 时被覆盖，重传才好）
+
+### 删文件不减仓库体积
+
+git 历史永久保留。所以**别反复传大文件测试**。
+
+---
+
+## 七、已知踩坑清单
+
+### 持久区 IO 与 zig 不兼容
+
+`/data/workspace` 是 virtio_rw，编译 Zig 项目会报：
+
+```
+error: unable to load 'build.zig': InputOutput
+```
+
+文件明明可读、空间也够。**解法**：复制到根分区再编译
+
 ```bash
 cp -r 项目 /bigworkspace/proj && cd /bigworkspace/proj
-zig build --cache-dir /bigworkspace/cache --global-cache-dir /bigworkspace/gcache
+zig build --cache-dir /bigworkspace/cache \
+          --global-cache-dir /bigworkspace/gcache
 ```
 
-**Zig 0.16 API 大变动**（文档里有完整清单，这里列最容易撞的）：
+### Zig 0.16 API 大变动
+
 - `std.heap.GeneralPurposeAllocator` → `DebugAllocator(.{}){}`
-- `std.process.argsAlloc` → 用 `main(init: std.process.Init.Minimal)` 主签名 + `init.args.iterate()`
+- `std.process.argsAlloc` → `main(init: std.process.Init.Minimal)` + `init.args.iterate()`
 - `std.fs.cwd()` → 不存在，改用 C stdio
 - C 指针不能 `[k]` 索引，先 `@ptrCast` 转切片
-- `mnemonic` / `op_str` 是定长数组，要 `std.mem.sliceTo(&x, 0)` 截断否则尾随空格
+- `mnemonic` / `op_str` 是定长数组，要 `std.mem.sliceTo(&x, 0)` 截断
 
-**zig c++ 必带参数**：`-Wno-nullability-completeness`
-（否则 119 条 libcxx 警告会盖住真实错误）
+### zig c++ 必带参数
 
-## 视觉 AI 现状（2026-09-17 升级）
+```
+-Wno-nullability-completeness
+```
+否则 119 条 libcxx 警告会盖住真实错误。
 
-仓库里现在有 **YOLOv8-nano**（`models/yolov8n.onnx`，12.2 MB）：
+### zls 编译
 
-- 目标检测，80 个 COCO 类别，**带坐标框**
-- 比原来那个 ResNet50 强得多：ResNet 只说"整张图像什么"，
-  YOLO 说"图里有什么、分别在哪个位置"
-- CPU 实测单张 74ms，可实时
-- 用法：`python3 tools/detect.py 图片.jpg --model models/yolov8n.onnx`
+依赖从 GitHub 拉组件，被封。**解法**：把 `build.zig.zon` 里的
+`github.com/OWNER/REPO/archive/SHA.tar.gz`
+改成 `codeload.github.com/OWNER/REPO/tar.gz/SHA`（hash 不用改，内容一致）。
 
-配套 OCR：**tesseract 4.1.1**（apt 装，`tesseract-ocr-chi-sim` 含中文）
-实测能从图里读出 "card"、"status OK"。
+### 交叉编译 Windows DLL
 
-**为什么不是 CLIP**：CLIP 才是最好的通用视觉模型（图文对齐、零样本），
-但权重全拿不到——HuggingFace 403、OpenAI blob 403、modelscope 403、
-PyTorch 官方 403、Google/Facebook CDN 全部被封。
-GitHub 代码搜索也搜不到可用的 CLIP onnx。**别再浪费时间试了。**
+```bash
+zig c++ -target x86_64-windows-gnu -shared -O2 \
+        -Wno-nullability-completeness -o mod.dll mod.cpp
+```
 
-**能拿到模型文件的唯一通道**：用 token 走 `git/blobs` API 从任意公开
-GitHub 仓库下载（最大 100MB）。`ghfetch.py` 就是干这个的。
-注意：Python urllib 在本环境 DNS 不稳，上传脚本要用 curl（见 `upload_curl.sh`）。
+实测导出表**干净**（只有显式 `dllexport` 的），
+避开了 MinGW `-shared` 把 dllimport 函数塞进导出表的坑。
 
-## 之前做过的事（避免重复劳动）
+---
 
-- **Zig 环境**：0.16.0 + zls 0.16.0（版本必须对齐）。zls 编译需把
-  `build.zig.zon` 里的 `github.com/OWNER/REPO/archive/SHA.tar.gz`
-  改成 `codeload.github.com/OWNER/REPO/tar.gz/SHA`（hash 不用改）
-- **热重载渲染**：Zig + Raylib，改 `src/game.zig` → `zig build` → 画面自动更新，
-  窗口不关。已编译产物在包3里
-- **反汇编**：Ghidra 拿不到（各源全封），用 Capstone 替代。
-  注意这是**反汇编**（机器码→汇编），**不是反编译**（→类C伪代码）
-- **交叉编译**：`zig c++ -target x86_64-windows-gnu -shared` 实测可用，
-  导出表干净（只有显式 dllexport 的），避开了 MinGW 的导出污染坑
-- **GTA5 / Flutter APK**：逆向分析文档在 `docs/` 下
+## 八、之前做过的事（避免重复劳动）
 
-## 干活前的建议
+- **Zig 环境**：0.16.0 + zls 0.16.0（版本必须对齐）✅
+- **热重载渲染**：Zig + Raylib，改 `game.zig` → `zig build` → 画面自动更新 ✅
+- **反汇编**：Ghidra 拿不到，用 Capstone 替代。注意是**反汇编**
+  （机器码→汇编），**不是反编译**（→类 C 伪代码）✅
+- **视觉升级**：ResNet50 → YOLOv8n（带坐标框，质的提升）✅
+- **JDK**：2026-09-17 装好 OpenJDK 17，javac 实测编译运行通过 ✅
+- **GTA5 / Flutter APK 逆向**：分析文档在 `docs/` 下 ✅
 
-1. 先跑 `bootstrap.sh` 恢复环境
-2. 读 `docs/00_先读我.md` 和 `docs/Zig开发环境绕路安装说明.txt`
-3. 遇到网络问题先查上面那张表，别重复试已确认封死的通道
-4. 长任务放后台跑 + 轮询，别一条命令硬等（容易被掐断）
+### 用户给过的文件/权限
+
+- GitHub 仓库 `wuyou335578/yuanbao-relay`（Public）
+- fine-grained token（Contents: Read and write，90 天）
+  ⚠️ 可能已过期或被 revoke，需要时向用户要新的
+
+---
+
+## 九、干活前的建议流程
+
+1. 先读本文件 + `docs/00_先读我.md`
+2. 跑 `bash bootstrap.sh wuyou335578/yuanbao-relay` 恢复环境
+3. 遇到网络问题先查第五节对照表，**别重复试已确认封死的通道**
+4. 长任务放后台跑 + 轮询，别一条命令硬等（容易被平台掐断）
+5. 往仓库写东西前，确认 token 还有效
