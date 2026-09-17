@@ -88,9 +88,27 @@ else
     [ -f /usr/include/capstone/capstone.h ] && echo "  ✅ 已安装" || echo "  ⚠️  失败"
 fi
 
+# ---------- 3.5 视觉能力（可选，需网络） ----------
+echo
+echo "【3.5】视觉能力依赖"
+echo "  安装 onnxruntime / opencv（跑 YOLOv8 检测用）"
+pip install onnxruntime opencv-python-headless \
+    -i https://mirrors.cloud.tencent.com/pypi/simple --no-cache-dir -q 2>&1 | tail -1
+python3 -c "import onnxruntime,cv2;print('  ✅ 推理引擎就绪')" 2>/dev/null || echo "  ⚠️  未装成功"
+echo "  安装 tesseract（OCR 文字识别）"
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tesseract-ocr tesseract-ocr-chi-sim >/dev/null 2>&1
+command -v tesseract >/dev/null && echo "  ✅ OCR 就绪" || echo "  ⚠️  tesseract 未装"
+
 # ---------- 4. 自检 ----------
 echo
 echo "【4/4】自检"
+echo "  ── 视觉模型 ──"
+if [ -f "$DEST/models/yolov8n.onnx" ]; then
+    echo "     ✅ yolov8n.onnx ($(stat -c%s "$DEST/models/yolov8n.onnx"|awk '{printf "%.1f MB",$1/1024/1024}'))"
+    echo "     用法: python3 $DEST/tools/detect.py 图片.jpg --model $DEST/models/yolov8n.onnx"
+else
+    echo "     ❌ 模型缺失"
+fi
 echo "  ── 原创脚本 ──"
 for f in see2.py lsp_query.py img2ascii.py; do
     P=$(find "$DEST" -name "$f" 2>/dev/null | head -1)
