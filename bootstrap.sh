@@ -99,6 +99,33 @@ echo "  安装 tesseract（OCR 文字识别）"
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq tesseract-ocr tesseract-ocr-chi-sim >/dev/null 2>&1
 command -v tesseract >/dev/null && echo "  ✅ OCR 就绪" || echo "  ⚠️  tesseract 未装"
 
+# ---------- 3.7 JDK（可选，133MB，按需恢复） ----------
+echo
+echo "【3.7】JDK 17"
+if command -v javac >/dev/null 2>&1; then
+    echo "  ✅ 已有: $(javac -version 2>&1)"
+else
+    echo "  仓库里有备份（jdk17/ 目录，6 个分卷共 133MB）"
+    echo "  想要更快的方案：apt install -y openjdk-17-jdk-headless"
+    read -r -p "  从仓库恢复 JDK？(y/N) " ans
+    if [ "$ans" = "y" ] || [ "$ans" = "Y" ]; then
+        cat "$DEST"/jdk17/jdk17_paa "$DEST"/jdk17/jdk17_pab "$DEST"/jdk17/jdk17_pac \
+            "$DEST"/jdk17/jdk17_pad "$DEST"/jdk17/jdk17_pae "$DEST"/jdk17/jdk17_paf \
+            > /tmp/jdk17.tar.gz
+        GOT=$(md5sum /tmp/jdk17.tar.gz | awk '{print $1}')
+        if [ "$GOT" = "41aacb511817897a1f59a653730cf78f" ]; then
+            echo "  ✅ md5 校验通过"
+            tar xzf /tmp/jdk17.tar.gz -C /tmp
+            mv /tmp/java-17-openjdk-amd64 /usr/lib/jvm/ 2>/dev/null
+            export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
+            echo "  ✅ JDK 就位: $(javac -version 2>&1)"
+        else
+            echo "  ❌ md5 不匹配 ($GOT)，分卷可能损坏"
+        fi
+        rm -f /tmp/jdk17.tar.gz
+    fi
+fi
+
 # ---------- 4. 自检 ----------
 echo
 echo "【4/4】自检"
