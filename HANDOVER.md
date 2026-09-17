@@ -46,6 +46,10 @@ yuanbao-relay/
 │   ├── lsp_query.py         让 AI 查 Zig 代码真相（补全/悬停/诊断）
 │   └── 一键安装.sh           环境自检
 │
+├── jdk17/                   ← OpenJDK 17 完整备份（133.8 MB，6 个分卷）
+│   ├── README.md            ★ 恢复方法 + md5 校验值（先看这个）
+│   └── jdk17_paa ... jdk17_paf   25MB×5 + 8.8MB
+│
 ├── models/
 │   └── yolov8n.onnx         YOLOv8-nano 检测模型（12.2 MB）
 │
@@ -89,7 +93,7 @@ bash bootstrap.sh wuyou335578/yuanbao-relay
 | g++ / gcc | 11.4.0 | ✅ |
 | python3 | 3.10.12 | ✅ |
 | java (JRE) | 17.0.20 | ✅ |
-| **javac (JDK)** | **17.0.20** | ✅ **2026-09-17 新装好** |
+| **javac (JDK)** | **17.0.20** | ✅ 2026-09-17 装好 + 已备份进 `jdk17/` |
 | dotnet-sdk | 6.0 | apt 源里有，需要时装 |
 | go / rust | — | 未装 |
 
@@ -248,7 +252,8 @@ zig c++ -target x86_64-windows-gnu -shared -O2 \
 - **反汇编**：Ghidra 拿不到，用 Capstone 替代。注意是**反汇编**
   （机器码→汇编），**不是反编译**（→类 C 伪代码）✅
 - **视觉升级**：ResNet50 → YOLOv8n（带坐标框，质的提升）✅
-- **JDK**：2026-09-17 装好 OpenJDK 17，javac 实测编译运行通过 ✅
+- **JDK**：2026-09-17 装好 OpenJDK 17，javac 实测编译运行通过；
+  完整版已分卷备份进 `jdk17/`（133.8 MB），恢复方法见 `jdk17/README.md` ✅
 - **GTA5 / Flutter APK 逆向**：分析文档在 `docs/` 下 ✅
 
 ### 用户给过的文件/权限
