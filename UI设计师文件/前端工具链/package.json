@@ -1,0 +1,16 @@
+{
+  "name": "fe-toolchain",
+  "version": "1.0.0",
+  "private": true,
+  "description": "元宝前端工程师工具链：TypeScript + Tailwind CSS + pnpm",
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2"
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "@parcel/watcher"
+    ]
+  }
+}
