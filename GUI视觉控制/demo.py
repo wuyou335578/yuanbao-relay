@@ -1,0 +1,20 @@
+import sys, json, time
+sys.path.insert(0,'/data/workspace/deskagent')
+from desktop_agent import Agent
+a = Agent()
+ok, pid = a.start_display(); print(f"① 虚拟屏: {'✅ pid='+pid if ok else '❌'}")
+a.launch(['python3','/data/workspace/deskagent/gui_demo.py'], wait=6)
+coords = json.load(open('/tmp/fast/coords.json'))
+print("② 按钮坐标:", [(c['name'],c['x'],c['y']) for c in coords])
+b4 = a.shot('/tmp/fast/d1.png')
+print(f"③ 点击前  红={a.has_color((255,82,82),img=b4)}px  青={a.has_color((0,229,255),img=b4)}px")
+red=[c for c in coords if c['name']=='RED'][0]
+a.click(red['x'], red['y'])
+af = a.shot('/tmp/fast/d2.png')
+print(f"④ 点击后  红={a.has_color((255,82,82),img=af)}px")
+print(f"⑤ 像素采样(348,250) = {a.pixel(348,250,img=af)}")
+print(f"⑥ 差异像素 = {a.diff('/tmp/fast/d1.png','/tmp/fast/d2.png')}")
+st = open('/tmp/fast/state.txt').read().strip()
+print(f"⑦ 程序内部状态 = {st}")
+print("\n★ 桌面代理工具包:", "可用 ✅" if a.has_color((255,82,82),img=af)>500 and st=='RED' else "❌")
+a.close()
