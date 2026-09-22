@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- CodeLite 14.0 配置示例：键名从 /usr/bin/codelite 二进制挖出，非猜测 -->
+<CodeLiteConfig>
+  <LSP>
+    <General>
+      <Enabled>yes</Enabled>
+    </General>
+    <Languages>
+      <Language Name="c" Enabled="yes"/>
+      <Language Name="cpp" Enabled="yes"/>
+      <Language Name="rust" Enabled="no"/>
+    </Languages>
+    <CXX>
+      <Clangd>clangd</Clangd>
+    </CXX>
+  </LSP>
+  <DAP>
+    <DebugAdapters>
+      <Adapter Name="gdb-bridge"
+               Command="python3 /path/to/dap_server.py stdio"/>
+    </DebugAdapters>
+  </DAP>
+  <Editor>
+    <Formatters>
+      <Formatter Language="cpp" Command="clang-format"/>
+    </Formatters>
+  </Editor>
+</CodeLiteConfig>
