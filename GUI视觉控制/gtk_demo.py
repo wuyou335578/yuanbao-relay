@@ -1,0 +1,16 @@
+import gi
+gi.require_version('Gtk','3.0')
+from gi.repository import Gtk
+w = Gtk.Window(title="ATSPITest")
+w.set_default_size(500,300)
+box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+w.add(box)
+lbl = Gtk.Label(label="Waiting")
+box.pack_start(lbl, True, True, 0)
+b = Gtk.Button(label="PressMe")
+def on_click(_): lbl.set_text("CLICKED_OK")
+b.connect("clicked", on_click)
+box.pack_start(b, True, True, 0)
+w.connect("destroy", Gtk.main_quit)
+w.show_all()
+Gtk.main()
